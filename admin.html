@@ -1006,6 +1006,17 @@ const API = (endpoint, options = {}) => {
         </div>
         <div id="upload-status" style="font-size:11px;color:var(--muted);margin-top:7px"></div>
       </div>
+
+      <div class="fg" style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
+        <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:10px">🍇 Варианты / Вкусы</label>
+        <div id="variants-list" style="margin-bottom:10px"></div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="variant-input" placeholder="Виноград, Вишня..."
+            style="flex:1;padding:8px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-size:13px;outline:none"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();addVariant()}">
+          <button type="button" onclick="addVariant()" class="btn btn-sm btn-primary">+ Добавить</button>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeM('m-prod')">Отмена</button>
@@ -1744,6 +1755,9 @@ async function openProdModal(id) {
   calcPack();
   openM('m-prod');
   setTimeout(() => document.getElementById('prod-name').focus(), 80);
+  // Загружаем варианты
+  const prodId = document.getElementById('prod-id').value || null;
+  loadVariants(prodId);
 }
 
 async function recalcProdOrder() {
@@ -1856,12 +1870,18 @@ async function saveProd() {
       is_visible: document.getElementById('prod-visible').checked
     };
 
+    let savedId = id;
     if (id) {
       await API(`products?id=eq.${id}`, { method: 'PATCH', body: payload });
     } else {
-      await API('products', { method: 'POST', body: payload });
+      const [newProd] = await API('products', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=representation' },
+        body: payload
+      });
+      savedId = newProd.id;
     }
-
+    await saveVariants(savedId);
     closeM('m-prod');
     toast(id ? '✅ Товар обновлён' : '✅ Товар добавлен', 's');
 
@@ -3093,6 +3113,70 @@ async function confirmAssignDriver() {
     loadOrders();
   } catch(e) {
     toast('Ошибка', 'e');
+  }
+}
+
+// ════════ ВАРИАНТЫ ТОВАРА ════════
+let _variants = [];
+let _deletedVariantIds = [];
+
+async function loadVariants(productId) {
+  _variants = [];
+  _deletedVariantIds = [];
+  if (productId) {
+    try {
+      const data = await API(`product_variants?product_id=eq.${productId}&order=display_order`);
+      _variants = data.map(v => ({ id: v.id, name: v.name, isNew: false }));
+    } catch(e) {}
+  }
+  renderVariants();
+}
+
+function renderVariants() {
+  const list = document.getElementById('variants-list');
+  if (!list) return;
+  if (!_variants.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Нет вариантов — товар без вкусов</div>';
+    return;
+  }
+  list.innerHTML = _variants.map((v, i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg3);border-radius:8px;margin-bottom:6px">
+      <span style="font-size:13px">🍬 ${v.name}</span>
+      <button onclick="removeVariant(${i})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:18px;line-height:1;padding:0 4px">×</button>
+    </div>`).join('');
+}
+
+function addVariant() {
+  const input = document.getElementById('variant-input');
+  const val = input.value.trim();
+  if (!val) return;
+  val.split(',').forEach(n => {
+    const trimmed = n.trim();
+    if (trimmed) _variants.push({ id: null, name: trimmed, isNew: true });
+  });
+  input.value = '';
+  renderVariants();
+}
+
+function removeVariant(index) {
+  const v = _variants[index];
+  if (v.id) _deletedVariantIds.push(v.id);
+  _variants.splice(index, 1);
+  renderVariants();
+}
+
+async function saveVariants(productId) {
+  for (const vid of _deletedVariantIds) {
+    try { await API(`product_variants?id=eq.${vid}`, { method: 'DELETE' }); } catch(e) {}
+  }
+  const newOnes = _variants.filter(v => v.isNew);
+  for (let i = 0; i < newOnes.length; i++) {
+    try {
+      await API('product_variants', {
+        method: 'POST',
+        body: { product_id: productId, name: newOnes[i].name, display_order: i }
+      });
+    } catch(e) {}
   }
 }
 </script>

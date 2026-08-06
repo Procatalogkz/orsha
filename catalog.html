@@ -752,6 +752,13 @@ const CLOUDINARY_PRESET = 'ml_default';
         renderCatalogHeader();
         renderCategoryFilters();
         renderProducts();
+
+        // Загружаем варианты для всех товаров
+        const productIds = allProducts.map(p => p.id);
+        if (productIds.length) {
+          await loadProductVariants(productIds);
+          renderProducts(); // перерисовываем карточки с вариантами
+        }
       } catch (e) {
         console.error('Ошибка загрузки:', e);
       }
@@ -905,6 +912,12 @@ const CLOUDINARY_PRESET = 'ml_default';
                     </span>`
                   : ''}
               </div>
+              ${(() => {
+                const variants = (window._productVariants || {})[p.id];
+                return variants && variants.length
+                  ? `<div style="font-size:11px;color:#86868b;margin-bottom:8px;line-height:1.4">🍬 ${variants.map(v => v.name).join(' · ')}</div>`
+                  : '';
+              })()}
               <button
                 class="btn-add-cart ${cart[p.id] ? 'in-cart' : ''}"
                 data-id="${p.id}"
@@ -1046,17 +1059,23 @@ const CLOUDINARY_PRESET = 'ml_default';
     function handleCartBtn(productId) {
       const p = allProducts.find(x => x.id === productId);
       if (!p) return;
-      
+
       if (cart[productId]) {
-        // Товар уже в корзине — удаляем
         delete cart[productId];
-      } else {
-        // Добавляем товар в корзину
-        cart[productId] = { ...p, qty: 1 };
+        updateCartBadge();
+        updateCartBtn(productId);
+        return;
       }
-      
-      updateCartBadge();
-      updateCartBtn(productId);
+
+      // Проверяем есть ли варианты
+      const variants = (window._productVariants || {})[productId];
+      if (variants && variants.length > 0) {
+        openVariantsModal(p, variants);
+      } else {
+        cart[productId] = { ...p, qty: 1 };
+        updateCartBadge();
+        updateCartBtn(productId);
+      }
     }
 
     function changeQty(productId, delta) {
@@ -1145,11 +1164,13 @@ ${baseUrl}`;
         // Сохраняем позиции
         const orderItems = items.map(i => ({
           order_id: order.id,
-          product_id: i.id,
+          product_id: i.product_id || i.id,
           product_name: i.name,
           quantity: i.qty,
           price_per_unit: i.price_per_unit,
           pack_qty: i.qty_per_pack,
+          variant_id: i.variant_id || null,
+          variant_name: i.variant_id ? i.name.split(' · ')[1] : null,
           total_price: i.price_per_unit * i.qty_per_pack * i.qty
         }));
 
@@ -1215,6 +1236,95 @@ ${baseUrl}`;
       document.getElementById('order-total').textContent = total.toLocaleString() + ' ₸';
     }
 
+    // ════════ ВАРИАНТЫ В КАТАЛОГЕ ════════
+    let _variantProduct = null;
+    let _variantQtys = {};
+
+    async function loadProductVariants(productIds) {
+      if (!productIds.length) return;
+      try {
+        const data = await API(
+          `product_variants?product_id=in.(${productIds.join(',')})&order=display_order&select=id,product_id,name`
+        );
+        window._productVariants = {};
+        data.forEach(v => {
+          if (!window._productVariants[v.product_id]) window._productVariants[v.product_id] = [];
+          window._productVariants[v.product_id].push(v);
+        });
+      } catch(e) { console.error(e); }
+    }
+
+    function openVariantsModal(product, variants) {
+      _variantProduct = product;
+      _variantQtys = {};
+      variants.forEach(v => { _variantQtys[v.id] = { name: v.name, qty: 0 }; });
+
+      document.getElementById('vm-product-name').textContent = product.name;
+      document.getElementById('vm-product-price').textContent =
+        `${(product.price_per_unit * product.qty_per_pack).toLocaleString()} ₸ за упаковку`;
+
+      document.getElementById('vm-variants-list').innerHTML = variants.map(v => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0f3">
+          <span style="font-size:15px">🍬 ${v.name}</span>
+          <div style="display:flex;align-items:center;gap:12px">
+            <button onclick="changeVariantQty('${v.id}',-1)"
+              style="width:32px;height:32px;border-radius:50%;border:1.5px solid #ddd;background:#f5f5f7;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">−</button>
+            <span id="vqty-${v.id}" style="font-size:16px;font-weight:700;min-width:20px;text-align:center">0</span>
+            <button onclick="changeVariantQty('${v.id}',1)"
+              style="width:32px;height:32px;border-radius:50%;border:1.5px solid #0066cc;background:#0066cc;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">+</button>
+          </div>
+        </div>`).join('');
+
+      const overlay = document.getElementById('variants-overlay');
+      overlay.style.display = 'flex';
+    }
+
+    function changeVariantQty(variantId, delta) {
+      const current = _variantQtys[variantId].qty;
+      const newQty = Math.max(0, current + delta);
+      _variantQtys[variantId].qty = newQty;
+      document.getElementById('vqty-' + variantId).textContent = newQty;
+    }
+
+    function closeVariantsModal() {
+      document.getElementById('variants-overlay').style.display = 'none';
+      _variantProduct = null;
+    }
+
+    function confirmVariants() {
+      if (!_variantProduct) return;
+      const entries = Object.entries(_variantQtys).filter(([,v]) => v.qty > 0);
+      if (!entries.length) {
+        alert('Выберите хотя бы один вкус');
+        return;
+      }
+      // Каждый вкус — отдельная позиция в корзине
+      entries.forEach(([variantId, v]) => {
+        const key = _variantProduct.id + '_' + variantId;
+        cart[key] = {
+          id: key,
+          product_id: _variantProduct.id,
+          variant_id: variantId,
+          name: _variantProduct.name + ' · ' + v.name,
+          qty: v.qty,
+          price_per_unit: _variantProduct.price_per_unit,
+          qty_per_pack: _variantProduct.qty_per_pack,
+          image_public_id: _variantProduct.image_public_id
+        };
+      });
+      updateCartBadge();
+      updateCartBtn(_variantProduct.id);
+      closeVariantsModal();
+    }
+
+    function toast(msg) {
+      const el = document.createElement('div');
+      el.textContent = msg;
+      el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:#fff;padding:12px 20px;border-radius:12px;font-size:14px;font-weight:600;z-index:9999;animation:fadeIn .2s';
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 2500);
+    }
+
     // Инициализация
     loadData();
 
@@ -1223,10 +1333,20 @@ ${baseUrl}`;
       // показана страница заказа, каталог не грузим
     }
   </script>
+
+  <!-- VARIANTS MODAL -->
+  <div id="variants-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);z-index:200;align-items:flex-end;justify-content:center">
+    <div style="background:#fff;border-radius:20px 20px 0 0;padding:24px 20px 40px;width:100%;max-width:500px">
+      <div style="font-size:18px;font-weight:800;margin-bottom:4px" id="vm-product-name"></div>
+      <div style="font-size:13px;color:#86868b;margin-bottom:20px" id="vm-product-price"></div>
+      <div style="font-size:12px;font-weight:700;color:#86868b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:12px">Выберите вкусы и количество</div>
+      <div id="vm-variants-list" style="margin-bottom:20px;max-height:40vh;overflow-y:auto"></div>
+      <div style="display:flex;gap:10px">
+        <button onclick="closeVariantsModal()" style="flex:1;padding:13px;background:#f5f5f7;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">Отмена</button>
+        <button onclick="confirmVariants()" style="flex:2;padding:13px;background:#0066cc;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">Добавить в корзину</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
-filtered.sort((a, b) => {
-  if (a._folder_order !== b._folder_order) return a._folder_order - b._folder_order;
-  if (a._cat_order !== b._cat_order) return a._cat_order - b._cat_order;
-  return (a.display_order ?? 999) - (b.display_order ?? 999);
-});
