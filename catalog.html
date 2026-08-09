@@ -222,17 +222,25 @@
 
       /* ── КНОПКА КОРЗИНЫ В ТОПБАРЕ ── */
       .cart-topbar-btn {
-        position: relative;
-        width: 42px; height: 42px;
-        border-radius: 12px;
-        border: 1px solid #ddd;
-        background: #fff;
-        display: flex; align-items: center; justify-content: center;
-        cursor: pointer; flex-shrink: 0;
-        font-size: 20px;
-        transition: all 0.2s;
+        position: fixed;
+        bottom: 24px;
+        right: 20px;
+        z-index: 50;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #fff;
+        font-size: 22px;
+        cursor: pointer;
+        box-shadow: 0 4px 20px rgba(0,102,204,0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: transform 0.2s;
       }
-      .cart-topbar-btn:hover { border-color: #27ae60; }
+      .cart-topbar-btn:hover { transform: scale(1.08); }
       .cart-badge {
         position: absolute;
         top: -6px; right: -6px;
@@ -556,9 +564,6 @@
     <!-- Фильтры -->
     <div class="topbar">
       <div class="topbar-row">
-        <div class="cart-topbar-btn" onclick="openCart()">
-          🛒<span class="cart-badge" id="cart-badge">0</span>
-        </div>
         <input type="text" class="search-input" placeholder="🔍 Поиск..." id="search" oninput="renderProducts()">
         <button class="burger-btn" onclick="toggleMenu()" id="burger-btn">
           <span></span><span></span><span></span>
@@ -1017,15 +1022,19 @@ const CLOUDINARY_PRESET = 'ml_default';
       try {
         const items = JSON.parse(repeatCart);
         items.forEach(i => {
-          cart[i.product_id] = {
-            id: i.product_id,
+          const key = i.variant_id
+            ? i.product_id + '_' + i.variant_id
+            : i.product_id;
+          cart[key] = {
+            id: key,
+            product_id: i.product_id,
+            variant_id: i.variant_id || null,
             name: i.product_name,
             qty: i.quantity || 1,
             price_per_unit: i.price_per_unit || 0,
             qty_per_pack: i.pack_qty || 1
           };
         });
-        // Открываем корзину после загрузки страницы
         window.addEventListener('load', () => setTimeout(() => {
           updateCartBadge();
           openCart();
@@ -1120,7 +1129,7 @@ const CLOUDINARY_PRESET = 'ml_default';
           <span class="cart-total-label">Итого (${cartCount()} уп.)</span>
           <span class="cart-total-sum">${cartTotal().toLocaleString()} ₸</span>
         </div>
-        <button class="btn-whatsapp" onclick="placeOrder()" style="background:#28a745">
+        <button class="btn-whatsapp" id="btn-place-order" onclick="placeOrder()" style="background:#28a745">
           🛒 Оформить заказ
         </button>`;
     }
@@ -1145,13 +1154,18 @@ ${baseUrl}`;
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`,'_blank');
     }
 
+    let _orderInProgress = false;
     async function placeOrder() {
+      if (_orderInProgress) return;
       if (!currentBuyer) {
         window.location.href = 'login.html';
         return;
       }
       const items = Object.values(cart);
       if (!items.length) return;
+      _orderInProgress = true;
+      const btn = document.getElementById('btn-place-order');
+      if (btn) { btn.disabled = true; btn.textContent = 'Оформляем...'; }
 
       try {
         // Создаём заказ
@@ -1187,6 +1201,7 @@ ${baseUrl}`;
         window.location.href = 'orders.html';
       } catch(e) {
         console.error(e);
+        _orderInProgress = false;
         cart = {};
         updateCartBadge();
         closeCart();
@@ -1346,6 +1361,11 @@ ${baseUrl}`;
         <button onclick="confirmVariants()" style="flex:2;padding:13px;background:#0066cc;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">Добавить в корзину</button>
       </div>
     </div>
+  </div>
+
+  <!-- Плавающая кнопка корзины -->
+  <div class="cart-topbar-btn" onclick="openCart()">
+    🛒<span class="cart-badge" id="cart-badge">0</span>
   </div>
 
 </body>

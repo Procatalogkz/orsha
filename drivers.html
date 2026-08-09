@@ -347,7 +347,7 @@
       const container = document.getElementById('driver-orders');
       try {
         const orders = await API(
-          `orders?driver_id=eq.${currentDriver.id}&status=eq.sent&order=created_at.asc&select=id,status,total_price,created_at,buyers(shop_name,phone,address)`
+          `orders?driver_id=eq.${currentDriver.id}&status=in.(sent,in_transit,delivering)&order=created_at.asc&select=id,status,total_price,created_at,buyers(shop_name,phone,address)`
         );
 
         if (!orders.length) {
@@ -396,9 +396,14 @@
                   <span>${(order.total_price||0).toLocaleString()} ₸</span>
                 </div>
               </div>
-              <button class="btn-delivered" onclick="markDelivered('${order.id}', this)">
-                ✅ Доставлено
-              </button>
+              ${order.status === 'delivering'
+                ? `<div style="padding:12px;background:#333;color:#aaa;border-radius:10px;text-align:center;font-size:14px;font-weight:600">⏳ Ожидает подтверждения клиента</div>`
+                : order.status === 'in_transit'
+                ? `<div style="display:flex;gap:8px">
+                  <button class="btn-delivered" style="flex:2" onclick="markDelivered('${order.id}', this)">📦 Доставлено</button>
+                  <button onclick="markRejected('${order.id}', this)" style="flex:1;padding:14px;background:#e05252;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">✕ Отказ</button>
+                </div>`
+                : `<button class="btn-delivered" onclick="startTransit('${order.id}', this)" style="background:#e8a020">🚗 В пути</button>`}
             </div>`;
         }).join('');
 
@@ -417,12 +422,47 @@
           headers: { 'Prefer': 'return=minimal' },
           body: { status: 'delivered' }
         });
-        btn.closest('.order-card').style.opacity = '0.4';
-        btn.textContent = '✅ Доставлено';
-        setTimeout(() => loadDriverOrders(), 1000);
+        const card = btn.closest('.order-card');
+        card.style.opacity = '0.6';
+        card.style.pointerEvents = 'none';
+        btn.style.background = '#aaa';
+        btn.textContent = '⏳ Ожидает подтверждения клиента';
       } catch(e) {
         btn.disabled = false;
         btn.textContent = '✅ Доставлено';
+        alert('Ошибка. Попробуйте ещё раз.');
+      }
+    }
+
+    async function startTransit(orderId, btn) {
+      btn.disabled = true;
+      btn.textContent = 'Обновляем...';
+      try {
+        await API(`orders?id=eq.${orderId}`, {
+          method: 'PATCH',
+          headers: { 'Prefer': 'return=minimal' },
+          body: { status: 'in_transit' }
+        });
+        loadDriverOrders();
+      } catch(e) {
+        btn.disabled = false;
+        btn.textContent = '🚗 В пути';
+        alert('Ошибка. Попробуйте ещё раз.');
+      }
+    }
+
+    async function markRejected(orderId, btn) {
+      if (!confirm('Подтвердить отказ от получения?')) return;
+      btn.disabled = true;
+      try {
+        await API(`orders?id=eq.${orderId}`, {
+          method: 'PATCH',
+          headers: { 'Prefer': 'return=minimal' },
+          body: { status: 'rejected' }
+        });
+        loadDriverOrders();
+      } catch(e) {
+        btn.disabled = false;
         alert('Ошибка. Попробуйте ещё раз.');
       }
     }

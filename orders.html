@@ -103,7 +103,9 @@
     }
     .status-new       { background: #fff3cd; color: #856404; }
     .status-sent      { background: #cfe2ff; color: #0a58ca; }
+    .status-delivering{ background: #fff0e0; color: #cc6600; }
     .status-delivered { background: #d1e7dd; color: #146c43; }
+    .status-rejected  { background: #fde8e8; color: #c62828; }
 
     .order-items-wrap { border-top: 1px solid #f0f0f3; padding-top: 10px; }
     .order-item-row {
@@ -305,8 +307,11 @@
 
     const STATUS_LABELS = {
       new:       { label: 'Новый',     cls: 'status-new' },
-      sent:      { label: 'Отправлен', cls: 'status-sent' },
-      delivered: { label: 'Доставлен', cls: 'status-delivered' }
+      sent:      { label: 'Водитель назначен', cls: 'status-sent' },
+      in_transit:  { label: 'В пути',       cls: 'status-delivering' },
+      delivering:  { label: 'Доставляется', cls: 'status-delivering' },
+      delivered: { label: 'Доставлен', cls: 'status-delivered' },
+      rejected: { label: 'Отказ / Возврат', cls: 'status-rejected' }
     };
 
     async function loadOrders() {
@@ -362,6 +367,10 @@
                   <span>${(order.total_price||0).toLocaleString()} ₸</span>
                 </div>
                 <button onclick="repeatOrder('${order.id}')" style="margin-top:12px;width:100%;padding:10px;background:#f0f5ff;color:#0066cc;border:1.5px solid #cce0ff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🔁 Повторить заказ</button>
+                ${order.status === 'delivering' || order.status === 'in_transit' ? `
+                  <button onclick="confirmDelivery('${order.id}')" style="margin-top:10px;width:100%;padding:12px;background:#28a745;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">
+                    ✅ Подтвердить получение
+                  </button>` : ''}
               </div>
             </div>`;
         }).join('');
@@ -384,13 +393,26 @@
       setTimeout(() => banner.remove(), 4000);
     }
 
+    async function confirmDelivery(orderId) {
+      if (!confirm('Подтвердить получение заказа?')) return;
+      try {
+        await API(`orders?id=eq.${orderId}`, {
+          method: 'PATCH',
+          headers: { 'Prefer': 'return=minimal' },
+          body: { status: 'delivered' }
+        });
+        loadOrders();
+      } catch(e) {
+        alert('Ошибка. Попробуйте ещё раз.');
+      }
+    }
+
     async function repeatOrder(orderId) {
       if (!confirm('Повторить этот заказ?')) return;
       try {
         const items = await API(
-          `order_items?order_id=eq.${orderId}&select=product_id,product_name,quantity,price_per_unit,pack_qty`
+          `order_items?order_id=eq.${orderId}&select=product_id,product_name,quantity,price_per_unit,pack_qty,variant_id,variant_name`
         );
-        console.log('repeat items:', items);
         if (!items.length) { alert('Позиции заказа не найдены'); return; }
         sessionStorage.setItem('repeat_cart', JSON.stringify(items));
         window.location.href = 'catalog.html';

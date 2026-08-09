@@ -2861,9 +2861,12 @@ async function saveMultiProd() {
 const STATUS_LABELS = {
   new:       { label: 'Новый',     color: '#856404', bg: '#fff3cd' },
   sent:      { label: 'Отправлен', color: '#0a58ca', bg: '#cfe2ff' },
-  delivered: { label: 'Доставлен', color: '#146c43', bg: '#d1e7dd' }
+  in_transit:  { label: 'В пути',      color: '#cc6600', bg: '#fff0e0' },
+  delivering:  { label: 'Доставляется', color: '#6600cc', bg: '#f0e0ff' },
+  delivered: { label: 'Доставлен', color: '#146c43', bg: '#d1e7dd' },
+  rejected: { label: 'Отказ / Возврат', color: '#fff', bg: '#e05252' }
 };
-const STATUS_NEXT = { new: 'sent', sent: 'delivered' };
+const STATUS_NEXT = { new: 'sent', sent: 'in_transit', in_transit: 'delivering', delivering: 'delivered' };
 
 let _allOrders = [];
 let _allOrderItems = {};
@@ -2875,7 +2878,7 @@ async function loadOrders() {
 
   try {
     _allOrders = await API(
-      'orders?order=created_at.desc&select=id,status,total_price,created_at,buyer_id,buyers(shop_name,phone)'
+      'orders?order=created_at.desc&select=id,status,total_price,created_at,buyer_id,driver_id,buyers(shop_name,phone)'
     );
 
     const orderIds = _allOrders.map(o => o.id);
@@ -2950,7 +2953,7 @@ function filterOrders() {
             <div style="font-size:12px;color:var(--muted);margin-top:2px">${buyer?.phone || ''} · #${order.id.slice(0,8).toUpperCase()}</div>
             <div style="font-size:11px;color:var(--muted2)">${d}</div>
           </div>
-          <span style="background:${st.bg};color:${st.color};padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0">
+          <span style="background:${st.bg};color:${st.color};padding:3px 9px;border-radius:20px;font-size:13px;font-weight:700;white-space:nowrap;flex-shrink:0">
             ${st.label}
           </span>
         </div>
@@ -2968,17 +2971,37 @@ function filterOrders() {
         ${nextStatus ? (() => {
           if (nextStatus === 'sent') {
             return `<button onclick="openAssignDriver('${order.id}')"
-              style="width:100%;padding:9px;background:var(--accent);color:#000;border:none;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer">
-              📦 Отправить → назначить водителя
+              style="width:100%;padding:9px;background:#0066cc;color:#fff;border:none;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer">
+              🚗 Назначить водителя
             </button>`;
+          } else if (nextStatus === 'in_transit') {
+            return `<div style="text-align:center;font-size:12px;color:var(--muted)">🚗 Водитель в пути</div>`;
+          } else if (nextStatus === 'delivering') {
+            return `<div>
+              <button onclick="updateOrderStatus('${order.id}', 'delivering')"
+                style="width:100%;padding:9px;background:#cc6600;color:#fff;border:none;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">
+              📦 Подтвердить получение
+              </button>
+              <div style="font-size:11px;color:var(--muted);text-align:center">⚠️ Проставляйте статус только если водитель сам не смог это сделать</div>
+            </div>`;
+          } else if (nextStatus === 'delivered') {
+            return `<div>
+              <button onclick="updateOrderStatus('${order.id}', 'delivered')"
+                style="width:100%;padding:9px;background:#e05252;color:#fff;border:none;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">
+                ✅ Доставлен
+              </button>
+              <div style="font-size:11px;color:var(--muted);text-align:center">⚠️ Проставляйте статус только если водитель сам не смог это сделать</div>
+            </div>`;
           } else {
-            return `<button onclick="updateOrderStatus('${order.id}', 'delivered')"
-              style="width:100%;padding:9px;background:var(--accent);color:#000;border:none;border-radius:var(--r);font-size:13px;font-weight:700;cursor:pointer">
-              ✅ Доставлен
-            </button>`;
+            return `<div style="text-align:center;font-size:12px;color:var(--success);font-weight:600">✅ Доставлен</div>`;
           }
         })() : `
           <div style="text-align:center;font-size:12px;color:var(--success);font-weight:600">✅ Доставлен</div>`}
+        ${order.driver_id ? `
+          <button onclick="printInvoice('${order.id}')"
+            style="width:100%;padding:8px;background:transparent;color:var(--accent);border:1.5px solid var(--accent);border-radius:var(--r);font-size:12px;font-weight:700;cursor:pointer;margin-top:6px">
+            🖨️ Сформировать накладную
+          </button>` : ''}
       </div>`;
   }).join('') + '</div>';
 }
@@ -3177,6 +3200,126 @@ async function saveVariants(productId) {
         body: { product_id: productId, name: newOnes[i].name, display_order: i }
       });
     } catch(e) {}
+  }
+}
+
+// ════════ НАКЛАДНАЯ ════════
+async function printInvoice(orderId) {
+  try {
+    const [order] = await API(
+      `orders?id=eq.${orderId}&select=id,created_at,total_price,buyers(shop_name,phone,address),drivers(name,phone,car_number)`
+    );
+    const items = await API(
+      `order_items?order_id=eq.${orderId}&select=product_name,variant_name,quantity,price_per_unit,pack_qty,total_price`
+    );
+
+    const buyer  = order.buyers  || {};
+    const driver = order.drivers || {};
+    const date   = new Date(order.created_at).toLocaleDateString('ru-RU', {
+      day: 'numeric', month: 'long', year: 'numeric'
+    });
+    const num = order.id.slice(0,8).toUpperCase();
+
+    const rows = items.map((i, idx) => {
+      const name = i.variant_name ? `${i.product_name} · ${i.variant_name}` : i.product_name;
+      const unitPrice = (i.price_per_unit * (i.pack_qty || 1)).toLocaleString();
+      return `<tr>
+        <td>${idx + 1}</td>
+        <td>${name}</td>
+        <td style="text-align:center">${i.quantity}</td>
+        <td style="text-align:right">${unitPrice} ₸</td>
+        <td style="text-align:right">${(i.total_price||0).toLocaleString()} ₸</td>
+      </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Накладная #${num}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 13px; color: #000; padding: 30px; }
+    h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+    .meta { color: #555; font-size: 12px; margin-bottom: 24px; }
+    .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+    .party { border: 1px solid #ddd; border-radius: 8px; padding: 14px; }
+    .party h3 { font-size: 12px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+    .party p { font-size: 13px; margin-bottom: 4px; }
+    .party b { font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    th { background: #f5f5f5; font-size: 12px; text-align: left; padding: 8px 10px; border: 1px solid #ddd; }
+    td { padding: 8px 10px; border: 1px solid #ddd; font-size: 13px; vertical-align: top; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .total-row td { font-weight: 800; font-size: 15px; background: #f0f5ff; }
+    .footer { margin-top: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+    .sign { border-top: 1px solid #000; padding-top: 6px; font-size: 12px; color: #555; }
+    @media print {
+      body { padding: 15px; }
+      button { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Накладная #${num}</h1>
+  <div class="meta">Дата: ${date} · TradeFlow</div>
+
+  <div class="parties">
+    <div class="party">
+      <h3>🏪 Покупатель</h3>
+      <p><b>${buyer.shop_name || '—'}</b></p>
+      <p>📞 ${buyer.phone || '—'}</p>
+      <p>📍 ${buyer.address || '—'}</p>
+    </div>
+    <div class="party">
+      <h3>🚗 Водитель</h3>
+      <p><b>${driver.name || '—'}</b></p>
+      <p>📞 ${driver.phone || '—'}</p>
+      <p>🚙 ${driver.car_number || '—'}</p>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:36px">№</th>
+        <th>Наименование</th>
+        <th style="width:60px;text-align:center">Кол-во</th>
+        <th style="width:120px;text-align:right">Цена за уп.</th>
+        <th style="width:120px;text-align:right">Сумма</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+      <tr class="total-row">
+        <td colspan="4" style="text-align:right">Итого:</td>
+        <td style="text-align:right">${(order.total_price||0).toLocaleString()} ₸</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <div>
+      <div class="sign">Подпись водителя: ___________________</div>
+    </div>
+    <div>
+      <div class="sign">Подпись получателя: ___________________</div>
+    </div>
+  </div>
+
+  <br><br>
+  <button onclick="window.print()" style="padding:10px 24px;background:#0066cc;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">
+    🖨️ Печать
+  </button>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+  } catch(e) {
+    console.error(e);
+    toast('Ошибка формирования накладной', 'e');
   }
 }
 </script>
