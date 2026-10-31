@@ -222,6 +222,32 @@
         box-shadow: none;
       }
 
+      /* ── СЧЁТЧИК УПАКОВОК НА КАРТОЧКЕ ── */
+      .cart-ctl { width: 100%; display: flex; justify-content: center; }
+      .qty-stepper {
+        margin: 11px auto 0; width: 100%; max-width: 220px;
+        display: flex; align-items: center;
+        border: 2px solid #27ae60; border-radius: 13px;
+        background: #fff; overflow: hidden;
+      }
+      .qs-btn {
+        width: 52px; height: 40px; border: none; background: none;
+        color: #27ae60; font-size: 24px; font-weight: 700; cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .qs-btn:active { opacity: 0.7; }
+      .qs-plus { background: #27ae60; color: #fff; }
+      .qs-mid {
+        flex: 1; min-width: 0;
+        display: flex; align-items: center; justify-content: center; gap: 3px;
+        font-size: 14px; font-weight: 700; color: var(--text);
+      }
+      .qs-input {
+        width: 46px; padding: 0; border: none; background: none; outline: none;
+        text-align: center; font: inherit; font-size: 17px; font-weight: 800; color: var(--text);
+      }
+      .qs-input:focus { background: #f4f1ea; border-radius: 6px; }
+
       /* ── ОВЕРЛЕЙ И ПАНЕЛЬ КОРЗИНЫ ── */
       .cart-overlay {
         position: fixed; inset: 0;
@@ -1001,12 +1027,7 @@ const CLOUDINARY_PRESET = 'ml_default';
                   : '';
               })()}
             </div>
-            <button
-              class="btn-add-cart ${cart[p.id] ? 'in-cart' : ''}"
-              data-id="${p.id}"
-              onclick="handleCartBtn('${p.id}')">
-              ${cart[p.id] ? '✓ В корзине' : '+ В корзину'}
-            </button>
+            <div class="cart-ctl" data-id="${p.id}">${cartCtlHtml(p.id)}</div>
           </div>`;
       }).join('');
     };
@@ -1211,35 +1232,72 @@ const CLOUDINARY_PRESET = 'ml_default';
       b.classList.toggle('visible', cnt > 0);
     }
 
-    function updateCartBtn(productId) {
-      const btn = document.querySelector(`.btn-add-cart[data-id="${productId}"]`);
-      if (btn) {
-        if (cart[productId]) {
-          btn.classList.add('in-cart');
-          btn.textContent = '✓ В корзине';
-        } else {
-          btn.classList.remove('in-cart');
-          btn.textContent = '+ В корзину';
-        }
+    // Сколько упаковок товара в корзине (для товаров со вкусами — сумма по вкусам)
+    function productCartQty(pid) {
+      let n = 0;
+      Object.values(cart).forEach(i => {
+        if (String(i.product_id || i.id) === String(pid)) n += i.qty;
+      });
+      return n;
+    }
+
+    // Товар «со вкусами»: есть варианты в базе или в корзине уже лежат вкусы этого товара
+    function isVariantProduct(pid) {
+      const v = (window._productVariants || {})[pid];
+      if (v && v.length) return true;
+      return Object.values(cart).some(i => i.variant_id && String(i.product_id) === String(pid));
+    }
+
+    // Что рисовать под карточкой: кнопка или счётчик
+    function cartCtlHtml(pid) {
+      const n = productCartQty(pid);
+      if (isVariantProduct(pid)) {
+        return n
+          ? `<button class="btn-add-cart in-cart" onclick="handleCartBtn('${pid}')">✓ В корзине: ${n} уп.</button>`
+          : `<button class="btn-add-cart" onclick="handleCartBtn('${pid}')">+ В корзину</button>`;
       }
+      if (!n) {
+        return `<button class="btn-add-cart" onclick="handleCartBtn('${pid}')">+ В корзину</button>`;
+      }
+      return `<div class="qty-stepper">
+        <button class="qs-btn" onclick="changeQty('${pid}',-1)" aria-label="Меньше">−</button>
+        <label class="qs-mid">
+          <input class="qs-input" type="text" inputmode="numeric" pattern="[0-9]*" value="${n}"
+                 onfocus="this.select()" onchange="setQty('${pid}', this.value)" aria-label="Количество упаковок">
+          <span>уп.</span>
+        </label>
+        <button class="qs-btn qs-plus" onclick="changeQty('${pid}',1)" aria-label="Больше">+</button>
+      </div>`;
+    }
+
+    // Ввод количества вручную. Пустое значение или 0 игнорируются (удаляется только кнопкой «−» на 1)
+    function setQty(pid, raw) {
+      const n = Math.min(999, parseInt(String(raw).replace(/\D/g, ''), 10) || 0);
+      if (!cart[pid]) return;
+      if (n > 0) cart[pid].qty = n;
+      updateCartBadge();
+      updateCartBtn(pid);
+      if (document.getElementById('cart-panel').classList.contains('open')) renderCartPanel();
+    }
+
+    function updateCartBtn(productId) {
+      const box = document.querySelector(`.cart-ctl[data-id="${productId}"]`);
+      if (box) box.innerHTML = cartCtlHtml(productId);
     }
 
     function handleCartBtn(productId) {
       const p = allProducts.find(x => x.id === productId);
       if (!p) return;
 
-      if (cart[productId]) {
-        delete cart[productId];
-        updateCartBadge();
-        updateCartBtn(productId);
-        return;
-      }
-
-      // Проверяем есть ли варианты
+      // Товар со вкусами — открываем окно выбора (и для первого добавления, и для правки)
       const variants = (window._productVariants || {})[productId];
       if (variants && variants.length > 0) {
         openVariantsModal(p, variants);
-      } else {
+        return;
+      }
+
+      // Обычный товар — первое добавление; дальше количество меняет счётчик
+      if (!cart[productId]) {
         cart[productId] = { ...p, qty: 1 };
         updateCartBadge();
         updateCartBtn(productId);
@@ -1247,11 +1305,13 @@ const CLOUDINARY_PRESET = 'ml_default';
     }
 
     function changeQty(productId, delta) {
-      if (!cart[productId]) return;
-      cart[productId].qty += delta;
-      if (cart[productId].qty <= 0) delete cart[productId];
+      const item = cart[productId];
+      if (!item) return;
+      const pid = item.product_id || productId; // для вкусов ключ составной, а карточка по id товара
+      item.qty += delta;
+      if (item.qty <= 0) delete cart[productId];
       updateCartBadge();
-      updateCartBtn(productId);
+      updateCartBtn(pid);
       if (document.getElementById('cart-panel').classList.contains('open')) renderCartPanel();
     }
 
@@ -1487,7 +1547,10 @@ ${baseUrl}`;
     function openVariantsModal(product, variants) {
       _variantProduct = product;
       _variantQtys = {};
-      variants.forEach(v => { _variantQtys[v.id] = { name: v.name, qty: 0 }; });
+      variants.forEach(v => {
+        const ex = cart[product.id + '_' + v.id];
+        _variantQtys[v.id] = { name: v.name, qty: ex ? ex.qty : 0 };
+      });
 
       document.getElementById('vm-product-name').textContent = product.name;
       document.getElementById('vm-product-price').textContent =
@@ -1499,7 +1562,7 @@ ${baseUrl}`;
           <div style="display:flex;align-items:center;gap:12px">
             <button onclick="changeVariantQty('${v.id}',-1)"
               style="width:32px;height:32px;border-radius:50%;border:1.5px solid #ddd;background:#f4f1ea;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">−</button>
-            <span id="vqty-${v.id}" style="font-size:16px;font-weight:700;min-width:20px;text-align:center">0</span>
+            <span id="vqty-${v.id}" style="font-size:16px;font-weight:700;min-width:20px;text-align:center">${_variantQtys[v.id].qty}</span>
             <button onclick="changeVariantQty('${v.id}',1)"
               style="width:32px;height:32px;border-radius:50%;border:1.5px solid #0066cc;background:#0066cc;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">+</button>
           </div>
@@ -1523,27 +1586,33 @@ ${baseUrl}`;
 
     function confirmVariants() {
       if (!_variantProduct) return;
-      const entries = Object.entries(_variantQtys).filter(([,v]) => v.qty > 0);
-      if (!entries.length) {
+      const pid = _variantProduct.id;
+      const entries = Object.entries(_variantQtys);
+      const anyPositive = entries.some(([, v]) => v.qty > 0);
+      if (!anyPositive && productCartQty(pid) === 0) {
         alert('Выберите хотя бы один вкус');
         return;
       }
-      // Каждый вкус — отдельная позиция в корзине
+      // Вкусы с количеством > 0 — в корзину, вкусы с 0 — убрать (так можно править и удалять)
       entries.forEach(([variantId, v]) => {
-        const key = _variantProduct.id + '_' + variantId;
-        cart[key] = {
-          id: key,
-          product_id: _variantProduct.id,
-          variant_id: variantId,
-          name: _variantProduct.name + ' · ' + v.name,
-          qty: v.qty,
-          price_per_unit: _variantProduct.price_per_unit,
-          qty_per_pack: _variantProduct.qty_per_pack,
-          image_public_id: _variantProduct.image_public_id
-        };
+        const key = pid + '_' + variantId;
+        if (v.qty > 0) {
+          cart[key] = {
+            id: key,
+            product_id: pid,
+            variant_id: variantId,
+            name: _variantProduct.name + ' · ' + v.name,
+            qty: v.qty,
+            price_per_unit: _variantProduct.price_per_unit,
+            qty_per_pack: _variantProduct.qty_per_pack,
+            image_public_id: _variantProduct.image_public_id
+          };
+        } else {
+          delete cart[key];
+        }
       });
       updateCartBadge();
-      updateCartBtn(_variantProduct.id);
+      updateCartBtn(pid);
       closeVariantsModal();
     }
 
@@ -1574,7 +1643,7 @@ ${baseUrl}`;
       <div id="vm-variants-list" style="margin-bottom:20px;max-height:40vh;overflow-y:auto"></div>
       <div style="display:flex;gap:10px">
         <button onclick="closeVariantsModal()" style="flex:1;padding:13px;background:#f4f1ea;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">Отмена</button>
-        <button onclick="confirmVariants()" style="flex:2;padding:13px;background:#0066cc;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">Добавить в корзину</button>
+        <button onclick="confirmVariants()" style="flex:2;padding:13px;background:#0066cc;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">Готово</button>
       </div>
     </div>
   </div>
