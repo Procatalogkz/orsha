@@ -709,7 +709,7 @@ const CLOUDINARY_PRESET = 'ml_default';
     let currentCatalog = null; // { id, name, slug } если открыт по ссылке
 
     // Проверка авторизации покупателя
-    const buyerRaw = sessionStorage.getItem('buyer');
+    const buyerRaw = localStorage.getItem('buyer');
     const currentBuyer = buyerRaw ? JSON.parse(buyerRaw) : null;
 
     // Если нет — не редиректим, каталог доступен всем, но заказ потребует входа

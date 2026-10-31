@@ -258,7 +258,7 @@
         if (existing && existing.length > 0) {
           // Известный покупатель — сразу входим
           const buyer = existing[0];
-          sessionStorage.setItem('buyer', JSON.stringify(buyer));
+          localStorage.setItem('buyer', JSON.stringify(buyer));
           window.location.href = 'catalog.html';
 
         } else if (!isNewUser) {
@@ -283,7 +283,7 @@
             body: { phone, shop_name: shopName, address }
           });
 
-          sessionStorage.setItem('buyer', JSON.stringify(newBuyer));
+          localStorage.setItem('buyer', JSON.stringify(newBuyer));
           window.location.href = 'catalog.html';
         }
 
@@ -300,7 +300,7 @@
     });
 
     // Если уже залогинен — сразу в каталог
-    const existing = sessionStorage.getItem('buyer');
+    const existing = localStorage.getItem('buyer');
     if (existing) window.location.href = 'catalog.html';
   </script>
 </body>

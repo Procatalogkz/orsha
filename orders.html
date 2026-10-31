@@ -245,12 +245,12 @@
       });
     };
 
-    const buyerRaw = sessionStorage.getItem('buyer');
+    const buyerRaw = localStorage.getItem('buyer');
     if (!buyerRaw) { window.location.href = 'login.html'; }
     let buyer = JSON.parse(buyerRaw);
 
     function logout() {
-      sessionStorage.removeItem('buyer');
+      localStorage.removeItem('buyer');
       window.location.href = 'login.html';
     }
 
@@ -295,7 +295,7 @@
           body: { shop_name, address, phone }
         });
         buyer = { ...buyer, shop_name, address, phone };
-        sessionStorage.setItem('buyer', JSON.stringify(buyer));
+        localStorage.setItem('buyer', JSON.stringify(buyer));
         renderProfile();
         closeEdit();
       } catch(e) {
