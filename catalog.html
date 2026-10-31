@@ -376,6 +376,8 @@
         flex-shrink: 0;
         width: 100%;
         scroll-snap-align: start;
+        content-visibility: auto;
+        contain-intrinsic-size: auto 100vh;
         display: flex;
         flex-direction: column;
         justify-content: center;
@@ -517,8 +519,7 @@
       .bottom-nav {
         position: fixed; left: 0; right: 0; bottom: 0; z-index: 150;
         display: flex;
-        background: rgba(255,255,255,0.96);
-        -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+        background: #fff;
         border-top: 1px solid rgba(0,0,0,0.08);
         padding-bottom: env(safe-area-inset-bottom, 0px);
       }
@@ -552,6 +553,29 @@
       }
       .search-panel.open { transform: none; }
       .search-close { width: 40px; height: 40px; flex-shrink: 0; border: none; border-radius: 50%; background: #fff; color: var(--muted); font-size: 16px; cursor: pointer; }
+
+      /* Стрелки перелистывания ленты товаров */
+      .feed-arrows { display: none; }
+      @media (max-width: 768px) {
+        .feed-arrows {
+          display: flex; flex-direction: column; gap: 8px;
+          position: fixed; right: 12px; z-index: 140; /* выше ленты, ниже панели и окон */
+          bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 156px);
+        }
+      }
+      .feed-arrow {
+        width: 42px; height: 42px; border-radius: 50%;
+        border: 1px solid rgba(0,0,0,0.08);
+        background: rgba(255,255,255,0.92); color: var(--text);
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+        cursor: pointer; -webkit-tap-highlight-color: transparent;
+      }
+      .feed-arrow svg {
+        width: 22px; height: 22px; fill: none; stroke: currentColor;
+        stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+      }
+      .feed-arrow:active { transform: scale(0.94); }
     </style>
 </head>
 <body>
@@ -585,6 +609,16 @@
     <input type="text" class="search-input" placeholder="Поиск товаров..." id="search"
            oninput="onSearchInput()" onkeydown="if(event.key==='Enter')this.blur()">
     <button class="search-close" onclick="closeSearch(true)">✕</button>
+  </div>
+
+  <!-- Стрелки перелистывания ленты -->
+  <div class="feed-arrows">
+    <button class="feed-arrow" onclick="feedStep(-1)" aria-label="Предыдущий товар">
+      <svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg>
+    </button>
+    <button class="feed-arrow" onclick="feedStep(1)" aria-label="Следующий товар">
+      <svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg>
+    </button>
   </div>
 
   <!-- Нижняя навигация -->
@@ -698,7 +732,7 @@ const CLOUDINARY_PRESET = 'ml_default';
 
     function cloudinaryUrl(publicId) {
       if (!publicId) return 'https://via.placeholder.com/400x300?text=No+Photo';
-      return `https://res.cloudinary.com/${CLOUDINARY_NAME}/image/upload/f_auto,q_auto,w_800/v1/${publicId}`;
+      return `https://res.cloudinary.com/${CLOUDINARY_NAME}/image/upload/f_auto,q_auto,w_700/v1/${publicId}`;
     }
 
     // Состояние
@@ -1024,6 +1058,27 @@ const CLOUDINARY_PRESET = 'ml_default';
       btn.classList.toggle('open', !isOpen);
     }
 
+    // Листание ленты стрелками: к следующей/предыдущей карточке
+    function feedStep(dir) {
+      const box = document.getElementById('products-container');
+      const cards = box.querySelectorAll('.product-card');
+      if (!cards.length) return;
+      const boxTop = box.getBoundingClientRect().top;
+      let rel = null;
+      if (dir > 0) {
+        for (let i = 0; i < cards.length; i++) {
+          const r = cards[i].getBoundingClientRect().top - boxTop;
+          if (r > 8) { rel = r; break; }
+        }
+      } else {
+        for (let i = cards.length - 1; i >= 0; i--) {
+          const r = cards[i].getBoundingClientRect().top - boxTop;
+          if (r < -8) { rel = r; break; }
+        }
+      }
+      if (rel !== null) box.scrollTo({ top: box.scrollTop + rel, behavior: 'smooth' });
+    }
+
     // Поиск
     function toggleSearch() {
       const panel = document.getElementById('search-panel');
@@ -1034,8 +1089,10 @@ const CLOUDINARY_PRESET = 'ml_default';
       if (open) setTimeout(() => input.focus(), 250); else input.blur();
     }
 
+    let _searchTimer;
     function onSearchInput() {
-      renderProducts();
+      clearTimeout(_searchTimer);
+      _searchTimer = setTimeout(renderProducts, 200);
       const has = !!document.getElementById('search').value.trim();
       document.getElementById('nav-search').classList.toggle('has-query', has);
     }
@@ -1385,6 +1442,7 @@ ${baseUrl}`;
       document.getElementById('products-container').style.display = 'none';
       document.querySelector('.topbar') && (document.querySelector('.topbar').style.display = 'none');
       document.querySelector('.bottom-nav') && (document.querySelector('.bottom-nav').style.display = 'none');
+      document.querySelector('.feed-arrows') && (document.querySelector('.feed-arrows').style.display = 'none');
       document.querySelector('.main-screen-logo') && (document.querySelector('.main-screen-logo').style.display = 'none');
       document.getElementById('order-page').classList.add('active');
       if (data.created_at) {
@@ -1523,3 +1581,6 @@ ${baseUrl}`;
 
 </body>
 </html>
+
+content-visibility: auto;
+contain-intrinsic-size: auto 100vh;
