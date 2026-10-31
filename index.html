@@ -2,9 +2,11 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#f4f1ea">
+  <meta name="description" content="Orsha — оптовый каталог для магазинов. Выбирайте товары и оформляйте заказ онлайн.">
   <title>Orsha — Оптовый каталог</title>
+  <link rel="preconnect" href="https://res.cloudinary.com" crossorigin>
   <style>
     :root {
       --accent: #0066cc;
@@ -12,202 +14,139 @@
       --muted: #86868b;
       --bg: #f4f1ea;
       --card: #ffffff;
-      --radius: 16px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { height: 100%; }
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       min-height: 100vh;
+      min-height: 100dvh;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 24px 20px;
+      padding: max(24px, env(safe-area-inset-top)) 0 max(24px, env(safe-area-inset-bottom));
+      overflow-x: hidden;
     }
 
     /* Логотип */
     .logo-wrap {
       text-align: center;
-      margin-bottom: 32px;
+      padding: 0 20px;
+      margin-bottom: 28px;
     }
     .logo-img {
-      height: 180px;
+      height: 110px;
       width: auto;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }
     .logo-sub {
       font-size: 15px;
       color: var(--muted);
     }
 
-    /* Карточка */
-    .card {
+    /* Бегущая лента товаров */
+    .marquees {
+      width: 100%;
+      margin-bottom: 28px;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+    }
+    .marquees.show { opacity: 1; }
+    .marquee {
+      overflow: hidden;
+      margin-bottom: 12px;
+      -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+      mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    }
+    .track {
+      display: flex;
+      width: max-content;
+      animation: scroll-left linear infinite;
+    }
+    .track.rev { animation-direction: reverse; }
+    /* margin-right, а не gap: иначе лента при зацикливании дёргается */
+    .m-item {
+      flex: 0 0 auto;
+      width: 104px;
+      height: 104px;
+      margin-right: 12px;
+      padding: 8px;
       background: var(--card);
-      border-radius: var(--radius);
-      padding: 32px 28px;
+      border-radius: 18px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .m-item img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    @keyframes scroll-left { to { transform: translateX(-50%); } }
+
+    /* Кнопка и текст под лентой */
+    .cta-wrap {
       width: 100%;
       max-width: 420px;
-      box-shadow: 0 4px 32px rgba(0,0,0,0.08);
-    }
-
-    /* Приветствие залогиненного */
-    .welcome-block {
-      display: none;
+      padding: 0 20px;
       text-align: center;
     }
-    .welcome-avatar {
-      width: 64px; height: 64px;
-      background: #e8f0fb;
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 30px;
-      margin: 0 auto 14px;
-    }
-    .welcome-name {
-      font-size: 20px;
-      font-weight: 800;
-      margin-bottom: 4px;
-    }
-    .welcome-phone {
-      font-size: 14px;
-      color: var(--muted);
-      margin-bottom: 24px;
-    }
-    .btn-continue {
-      width: 100%;
-      padding: 15px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 12px;
+    .welcome {
+      display: none;
       font-size: 16px;
       font-weight: 700;
-      cursor: pointer;
       margin-bottom: 12px;
-      transition: opacity 0.2s;
     }
-    .btn-continue:hover { opacity: 0.9; }
-    .btn-switch {
-      width: 100%;
-      padding: 13px;
-      background: #f4f1ea;
-      color: var(--muted);
-      border: none;
-      border-radius: 12px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .btn-switch:hover { color: var(--text); }
-
-    /* Форма входа */
-    .login-block { display: none; }
-    .login-title {
-      font-size: 20px;
-      font-weight: 800;
-      margin-bottom: 6px;
-      text-align: center;
-    }
-    .login-sub {
-      font-size: 14px;
-      color: var(--muted);
-      text-align: center;
-      margin-bottom: 24px;
-    }
-
-    .form-group { margin-bottom: 14px; }
-    .form-group label {
+    .btn-cta {
       display: block;
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      margin-bottom: 6px;
-    }
-    .form-group input {
       width: 100%;
-      padding: 14px 16px;
-      border: 1.5px solid #e0e0e5;
-      border-radius: 10px;
-      font-size: 16px;
-      outline: none;
-      background: #fafafa;
-      color: var(--text);
-      transition: border-color 0.2s;
-    }
-    .form-group input:focus { border-color: var(--accent); background: #fff; }
-
-    .btn-login {
-      width: 100%;
-      padding: 15px;
+      padding: 16px;
+      border-radius: 14px;
       background: var(--accent);
       color: #fff;
-      border: none;
-      border-radius: 12px;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      margin-top: 4px;
-      transition: opacity 0.2s, transform 0.1s;
+      font-size: 17px;
+      font-weight: 800;
+      text-decoration: none;
+      box-shadow: 0 8px 24px rgba(0, 102, 204, 0.28);
+      transition: transform 0.1s, opacity 0.2s;
     }
-    .btn-login:hover { opacity: 0.9; }
-    .btn-login:active { transform: scale(0.98); }
-    .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .error-msg {
-      background: #fff0f0;
-      border: 1px solid #ffcdd2;
-      color: #c62828;
-      border-radius: 8px;
-      padding: 10px 14px;
-      font-size: 14px;
-      margin-top: 12px;
-      display: none;
-      text-align: center;
+    .btn-cta:hover { opacity: 0.92; }
+    .btn-cta:active { transform: scale(0.98); }
+    .btn-cta:focus-visible,
+    .switch-link:focus-visible {
+      outline: 3px solid var(--text);
+      outline-offset: 3px;
     }
-    .error-msg.show { display: block; }
-
-    .hint {
-      text-align: center;
+    .trust {
+      margin-top: 14px;
       font-size: 13px;
       color: var(--muted);
-      margin-top: 20px;
-      line-height: 1.6;
-    }
-
-    /* Спиннер */
-    .spinner {
-      display: inline-block;
-      width: 16px; height: 16px;
-      border: 2px solid rgba(255,255,255,0.4);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      vertical-align: middle;
-      margin-right: 6px;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* Фичи */
-    .features {
       display: flex;
       justify-content: center;
-      gap: 24px;
-      margin-top: 28px;
       flex-wrap: wrap;
+      gap: 4px 16px;
     }
-    .feature {
-      text-align: center;
+    .switch-link {
+      display: none;
+      margin: 10px auto 0;
+      padding: 4px 8px;
+      background: none;
+      border: none;
+      font: inherit;
       font-size: 13px;
       color: var(--muted);
+      text-decoration: underline;
+      cursor: pointer;
     }
-    .feature-icon { font-size: 22px; margin-bottom: 4px; }
 
-    @media (max-width: 480px) {
-      .card { padding: 24px 20px; }
+    @media (prefers-reduced-motion: reduce) {
+      .track { animation: none; }
+      .marquees { transition: none; }
     }
   </style>
 </head>
@@ -221,188 +160,79 @@
     <div class="logo-sub">Оптовые заказы — просто и быстро</div>
   </div>
 
-  <div class="card">
-
-    <!-- Залогиненный пользователь -->
-    <div class="welcome-block" id="welcome-block">
-      <div class="welcome-avatar">🏪</div>
-      <div class="welcome-name" id="welcome-name"></div>
-      <div class="welcome-phone" id="welcome-phone"></div>
-      <button class="btn-continue" onclick="goToCatalog()">
-        Перейти в каталог →
-      </button>
-      <button class="btn-switch" onclick="switchAccount()">
-        Войти с другого номера
-      </button>
-    </div>
-
-    <!-- Форма входа -->
-    <div class="login-block" id="login-block">
-      <div class="login-title">Войти</div>
-      <div class="login-sub">Введите номер телефона</div>
-
-      <div class="form-group">
-        <label>Номер телефона</label>
-        <input type="tel" id="phone" placeholder="7 707 123 00 01"
-          autocomplete="tel" inputmode="tel">
-      </div>
-
-      <div class="form-group" id="shop-name-group" style="display:none">
-        <label>Название магазина</label>
-        <input type="text" id="shop-name" placeholder='Магазин "Фирдаус"'
-          autocomplete="organization">
-      </div>
-
-      <div class="form-group" id="address-group" style="display:none">
-        <label>Адрес магазина</label>
-        <input type="text" id="shop-address" placeholder="ул. Абая 10, Алматы"
-          autocomplete="street-address">
-      </div>
-
-      <div class="error-msg" id="error-msg"></div>
-
-      <button class="btn-login" id="btn-login" onclick="handleLogin()">
-        Войти
-      </button>
-
-      <div class="hint">
-        Новый магазин? Просто введите номер
-      </div>
-    </div>
-
+  <!-- Лента товаров: показывается, когда загрузились картинки -->
+  <div class="marquees" id="marquees" aria-hidden="true">
+    <div class="marquee"><div class="track" id="row1" style="animation-duration:38s"></div></div>
+    <div class="marquee"><div class="track rev" id="row2" style="animation-duration:46s"></div></div>
   </div>
 
-  <div class="features">
-    <div class="feature">
-      <div class="feature-icon">📦</div>
-      Широкий ассортимент
+  <div class="cta-wrap">
+    <div class="welcome" id="welcome"></div>
+    <a class="btn-cta" href="catalog.html">Каталог</a>
+    <div class="trust">
+      <span>Мин. заказ 10 000 ₸</span>
+      <span>Оплата при получении</span>
     </div>
-    <div class="feature">
-      <div class="feature-icon">🚗</div>
-      Быстрая доставка
-    </div>
-    <div class="feature">
-      <div class="feature-icon">💳</div>
-      Оплата при получении
-    </div>
+    <button type="button" class="switch-link" id="switch-link" onclick="switchAccount()">Сменить номер</button>
   </div>
 
   <script>
-    const SUPABASE_URL = 'https://xhcteinsgmrlpyijkhdb.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_h6M-sNlKmmeW8xrQeW4EtA_LjTBDn-d';
+    const SUPABASE_URL    = 'https://xhcteinsgmrlpyijkhdb.supabase.co';
+    const SUPABASE_KEY    = 'sb_publishable_h6M-sNlKmmeW8xrQeW4EtA_LjTBDn-d';
+    const CLOUDINARY_NAME = 'dg1f3dmev';
 
-    const API = (endpoint, options = {}) => {
-      const url = `${SUPABASE_URL}/rest/v1/${endpoint}`;
-      const headers = {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        ...(options.headers || {})
-      };
-      if (options.body && typeof options.body === 'object') {
-        headers['Content-Type'] = 'application/json';
-        options.body = JSON.stringify(options.body);
+    // Приветствие вошедшего покупателя
+    try {
+      const buyer = JSON.parse(localStorage.getItem('buyer') || 'null');
+      if (buyer) {
+        const el = document.getElementById('welcome');
+        el.textContent = 'Здравствуйте, ' + (buyer.shop_name || 'покупатель') + '!';
+        el.style.display = 'block';
+        document.getElementById('switch-link').style.display = 'block';
       }
-      return fetch(url, { ...options, headers }).then(async res => {
-        if (!res.ok) { const e = await res.text(); throw new Error(e); }
-        if (res.status === 204) return null;
-        return res.json();
-      });
-    };
-
-    function normalizePhone(raw) {
-      let c = raw.replace(/[^\d+]/g, '');
-      if (c.startsWith('8') && c.length === 11) c = '+7' + c.slice(1);
-      if (!c.startsWith('+') && c.length === 11) c = '+' + c;
-      return c;
-    }
-
-    // Проверяем сессию
-    const buyerRaw = sessionStorage.getItem('buyer');
-    if (buyerRaw) {
-      const buyer = JSON.parse(buyerRaw);
-      document.getElementById('welcome-block').style.display = 'block';
-      document.getElementById('welcome-name').textContent = buyer.shop_name || '—';
-      document.getElementById('welcome-phone').textContent = buyer.phone;
-    } else {
-      document.getElementById('login-block').style.display = 'block';
-    }
-
-    function goToCatalog() {
-      window.location.href = 'catalog.html';
-    }
+    } catch (e) {}
 
     function switchAccount() {
-      sessionStorage.removeItem('buyer');
-      document.getElementById('welcome-block').style.display = 'none';
-      document.getElementById('login-block').style.display = 'block';
-      setTimeout(() => document.getElementById('phone').focus(), 100);
+      localStorage.removeItem('buyer');
+      location.reload();
     }
 
-    let isNewUser = false;
-
-    function showError(msg) {
-      const el = document.getElementById('error-msg');
-      el.textContent = msg;
-      el.classList.add('show');
-    }
-    function hideError() {
-      document.getElementById('error-msg').classList.remove('show');
-    }
-
-    function setLoading(loading) {
-      const btn = document.getElementById('btn-login');
-      btn.disabled = loading;
-      btn.innerHTML = loading
-        ? '<span class="spinner"></span>Проверяем...'
-        : (isNewUser ? 'Зарегистрироваться и войти' : 'Войти');
+    // Заполняет одну строку ленты. Список дублируется, чтобы прокрутка была бесшовной
+    function fillRow(id, list) {
+      let items = list;
+      while (items.length < 10) items = items.concat(list); // лента не должна быть короче экрана
+      const html = items.map(function (p) {
+        return '<div class="m-item"><img src="https://res.cloudinary.com/' + CLOUDINARY_NAME +
+               '/image/upload/f_auto,q_auto,w_240/' + p +
+               '" alt="" decoding="async" onerror="this.style.visibility=\'hidden\'"></div>';
+      }).join('');
+      document.getElementById(id).innerHTML = html + html;
     }
 
-    async function handleLogin() {
-      hideError();
-      const rawPhone = document.getElementById('phone').value.trim();
-      if (!rawPhone) { showError('Введите номер телефона'); return; }
-      const phone = normalizePhone(rawPhone);
-      if (phone.length < 11) { showError('Неверный формат номера'); return; }
-
-      setLoading(true);
+    // Случайные товары с картинками из базы
+    (async function loadMarquee() {
       try {
-        const existing = await API(`buyers?phone=eq.${encodeURIComponent(phone)}&select=id,phone,shop_name,address`);
+        const res = await fetch(
+          SUPABASE_URL + '/rest/v1/products?select=image_public_id&is_visible=eq.true&image_public_id=not.is.null&limit=80',
+          { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } }
+        );
+        if (!res.ok) return;
+        const rows = await res.json();
+        const ids = Array.from(new Set(rows.map(function (r) { return r.image_public_id; }).filter(Boolean)));
+        if (ids.length < 4) return; // мало картинок — ленту не показываем
 
-        if (existing && existing.length > 0) {
-          sessionStorage.setItem('buyer', JSON.stringify(existing[0]));
-          window.location.href = 'catalog.html';
-
-        } else if (!isNewUser) {
-          isNewUser = true;
-          document.getElementById('shop-name-group').style.display = 'block';
-          document.getElementById('address-group').style.display = 'block';
-          document.getElementById('shop-name').focus();
-          setLoading(false);
-          showError('Номер не найден. Введите название и адрес магазина.');
-
-        } else {
-          const shopName = document.getElementById('shop-name').value.trim();
-          if (!shopName) { showError('Введите название магазина'); setLoading(false); return; }
-          const address = document.getElementById('shop-address').value.trim();
-
-          const [newBuyer] = await API('buyers', {
-            method: 'POST',
-            headers: { 'Prefer': 'return=representation' },
-            body: { phone, shop_name: shopName, address }
-          });
-          sessionStorage.setItem('buyer', JSON.stringify(newBuyer));
-          window.location.href = 'catalog.html';
+        for (let i = ids.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const t = ids[i]; ids[i] = ids[j]; ids[j] = t;
         }
-      } catch(e) {
-        console.error(e);
-        showError('Ошибка соединения. Попробуйте ещё раз.');
-        setLoading(false);
-      }
-    }
-
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Enter') handleLogin();
-    });
+        const take = ids.slice(0, 20);
+        const half = Math.ceil(take.length / 2);
+        const second = take.slice(half);
+        fillRow('row1', take.slice(0, half));
+        fillRow('row2', second.length ? second : take.slice(0, half));
+        document.getElementById('marquees').classList.add('show');
+      } catch (e) { console.error(e); }
+    })();
   </script>
 </body>
 </html>
