@@ -213,6 +213,7 @@
         box-shadow: 0 4px 14px rgba(39,174,96,0.3);
       }
       .btn-add-cart:hover { background: #219a52; }
+      .btn-add-cart:disabled { opacity: 0.55; cursor: not-allowed; }
 
       /* Состояние "в корзине" — белая с зелёной рамкой */
       .btn-add-cart.in-cart {
@@ -1250,6 +1251,9 @@ const CLOUDINARY_PRESET = 'ml_default';
 
     // Что рисовать под карточкой: кнопка или счётчик
     function cartCtlHtml(pid) {
+      if ((window._soldOutProducts || {})[pid]) {
+        return `<button class="btn-add-cart" disabled>Нет в наличии</button>`;
+      }
       const n = productCartQty(pid);
       if (isVariantProduct(pid)) {
         return n
@@ -1288,6 +1292,7 @@ const CLOUDINARY_PRESET = 'ml_default';
     function handleCartBtn(productId) {
       const p = allProducts.find(x => x.id === productId);
       if (!p) return;
+      if ((window._soldOutProducts || {})[productId]) return;
 
       // Товар со вкусами — открываем окно выбора (и для первого добавления, и для правки)
       const variants = (window._productVariants || {})[productId];
@@ -1534,14 +1539,40 @@ ${baseUrl}`;
       if (!productIds.length) return;
       try {
         const data = await API(
-          `product_variants?product_id=in.(${productIds.join(',')})&order=display_order&select=id,product_id,name`
+          `product_variants?product_id=in.(${productIds.join(',')})&order=display_order&select=*`
         );
         window._productVariants = {};
+        window._soldOutProducts = {};
+        const hasAny = {};
         data.forEach(v => {
+          hasAny[v.product_id] = true;
+          if (v.is_visible === false) return; // скрытый вкус не показываем
           if (!window._productVariants[v.product_id]) window._productVariants[v.product_id] = [];
           window._productVariants[v.product_id].push(v);
         });
+        // вкусы у товара есть, но все скрыты — товар недоступен
+        Object.keys(hasAny).forEach(pid => {
+          if (!window._productVariants[pid]) window._soldOutProducts[pid] = true;
+        });
+        pruneHiddenVariantsFromCart(productIds);
       } catch(e) { console.error(e); }
+    }
+
+    // Убирает из сохранённой корзины вкусы, которые скрыты или удалены
+    function pruneHiddenVariantsFromCart(productIds) {
+      const known = new Set(productIds.map(String));
+      let removed = 0;
+      Object.keys(cart).forEach(key => {
+        const it = cart[key];
+        if (!it.variant_id || !known.has(String(it.product_id))) return;
+        const list = (window._productVariants || {})[it.product_id] || [];
+        if (!list.some(v => String(v.id) === String(it.variant_id))) { delete cart[key]; removed++; }
+      });
+      if (removed) {
+        saveCart();
+        updateCartBadge();
+        toast('Некоторые вкусы закончились и убраны из корзины');
+      }
     }
 
     function openVariantsModal(product, variants) {

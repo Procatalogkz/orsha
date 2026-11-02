@@ -349,6 +349,7 @@ pre.code{background:var(--bg3);border:1px solid var(--border);border-radius:var(
   #page-catalogs,
   #page-orders,
   #page-drivers,
+  #page-buyers,
   #page-settings {
     display: none;
   }
@@ -359,6 +360,7 @@ pre.code{background:var(--bg3);border:1px solid var(--border);border-radius:var(
   #page-catalogs.mob-active,
   #page-orders.mob-active,
   #page-drivers.mob-active,
+  #page-buyers.mob-active,
   #page-settings.mob-active {
     display: block !important;
   }
@@ -486,6 +488,7 @@ const API = (endpoint, options = {}) => {
       <div class="sb-section">Инструменты</div>
       <div class="sb-item" onclick="go('orders')">   🛍️ Заказы <span id="nav-orders-count" style="background:#e53935;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;display:none">0</span></div>
       <div class="sb-item" onclick="go('drivers')">   <span class="ico">🚗</span> <span>Водители</span></div>
+      <div class="sb-item" id="nav-buyers" onclick="go('buyers')"><span class="ico">👥</span><span>Клиенты</span></div>
       <div class="sb-item" onclick="window.location.href='supervisor.html'"><span class="ico">📋</span><span>Консигнации</span></div>
       <div class="sb-item" onclick="window.open('coverage.html','_blank')">   <span class="ico">🗺️</span><span>Sales Coverage Map</span></div>
     </nav>
@@ -552,6 +555,10 @@ const API = (endpoint, options = {}) => {
         <div class="mob-tile" onclick="mobGo('drivers')">
           <div class="mob-tile-ico">🚗</div>
           <div class="mob-tile-label">Водители</div>
+        </div>
+        <div class="mob-tile" onclick="mobGo('buyers')">
+          <div class="mob-tile-ico">👥</div>
+          <div class="mob-tile-label">Клиенты</div>
         </div>
         <div class="mob-tile" onclick="window.location.href='supervisor.html'">
           <div class="mob-tile-ico">📋</div>
@@ -730,6 +737,17 @@ const API = (endpoint, options = {}) => {
           <button onclick="openDriverModal()" class="btn btn-primary">+ Добавить</button>
         </div>
         <div id="drivers-container">Загрузка...</div>
+      </div>
+
+      <!-- ── BUYERS ── -->
+      <div id="page-buyers" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+          <h2 style="font-size:18px;font-weight:700">👥 Клиенты <span id="buyers-count" style="color:var(--muted);font-weight:500;font-size:14px"></span></h2>
+          <button onclick="loadBuyers()" style="padding:7px 14px;border:1px solid var(--border2);border-radius:var(--r);cursor:pointer;font-size:13px;background:transparent;color:var(--text)">↻ Обновить</button>
+        </div>
+        <input type="text" id="buyers-search" placeholder="🔍 Поиск по названию, телефону, адресу..." oninput="renderBuyers()"
+          style="width:100%;padding:9px 13px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-size:13px;outline:none;margin-bottom:16px">
+        <div id="buyers-container">Загрузка...</div>
       </div>
 
     </div>
@@ -1079,6 +1097,35 @@ const API = (endpoint, options = {}) => {
   </div>
 </div>
 
+<!-- КЛИЕНТ: РЕДАКТИРОВАНИЕ -->
+<div class="overlay" id="m-buyer">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Редактировать клиента</div>
+      <button class="modal-x" onclick="closeM('m-buyer')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg">
+        <label>Название магазина *</label>
+        <input type="text" id="buyer-shop" placeholder='Магазин "Фирдаус"'>
+      </div>
+      <div class="fg">
+        <label>Телефон *</label>
+        <input type="tel" id="buyer-phone" placeholder="+7 707 123 00 01">
+        <div class="hint">По этому номеру клиент входит в каталог</div>
+      </div>
+      <div class="fg">
+        <label>Адрес</label>
+        <input type="text" id="buyer-address" placeholder="ул. Абая 10, Алматы">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-buyer')">Отмена</button>
+      <button class="btn btn-primary" onclick="saveBuyer()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <!-- ASSIGN DRIVER -->
 <div class="overlay" id="m-assign-driver">
   <div class="modal">
@@ -1122,8 +1169,8 @@ const API = (endpoint, options = {}) => {
 // ═══════════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════════
-const PAGES = ['dash','cats','brands','products','catalogs','orders','drivers'];
-const TITLES = { dash:'Дашборд', cats:'Категории', brands:'Бренды / ТМ', products:'Товары', catalogs:'Каталоги', orders:'Заказы', drivers:'Водители' };
+const PAGES = ['dash','cats','brands','products','catalogs','orders','drivers','buyers'];
+const TITLES = { dash:'Дашборд', cats:'Категории', brands:'Бренды / ТМ', products:'Товары', catalogs:'Каталоги', orders:'Заказы', drivers:'Водители', buyers:'Клиенты' };
 const ACTIONS = {
   brands:   ()=>`<button class="btn btn-primary btn-sm" onclick="openBrandModal()">+ Бренд</button>`,
   products: ()=>`<button class="btn btn-primary btn-sm" onclick="openProdModal()">+ Товар</button>`,
@@ -1185,6 +1232,7 @@ function go(page) {
   if(page==='catalogs') renderCatalogs();
   if(page==='orders')   loadOrders();
   if(page==='drivers') loadDrivers();
+  if(page==='buyers')  loadBuyers();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2492,13 +2540,13 @@ function mobGo(page) {
   // Показываем кнопку назад
   document.getElementById('mob-back-btn').classList.add('visible');
   // Активируем страницу
-  const pages = ['dash','cats','brands','products','catalogs','settings'];
+  const pages = ['dash','cats','brands','products','catalogs','settings','orders','drivers','buyers'];
   pages.forEach(p => {
     const el = document.getElementById('page-' + p);
     if (el) el.classList.toggle('mob-active', p === page);
   });
   // Обновляем заголовок
-  const titles = { dash:'Дашборд', cats:'Категории', brands:'Бренды / ТМ', products:'Товары', catalogs:'Каталоги', settings:'Настройки' };
+  const titles = { dash:'Дашборд', cats:'Категории', brands:'Бренды / ТМ', products:'Товары', catalogs:'Каталоги', settings:'Настройки', orders:'Заказы', drivers:'Водители', buyers:'Клиенты' };
   document.getElementById('topbar-title').textContent = titles[page] || page;
   // Экшены в топбаре
   const ACTIONS = {
@@ -2514,12 +2562,15 @@ function mobGo(page) {
   if (page === 'brands')       renderBrands();
   if (page === 'products')     { fillProdSelects(); renderProds(); }
   if (page === 'catalogs')     renderCatalogs();
+  if (page === 'orders')       loadOrders();
+  if (page === 'drivers')      loadDrivers();
+  if (page === 'buyers')       loadBuyers();
 }
 
 function mobGoHome() {
   if (!IS_MOB()) return;
   // Скрываем все страницы
-  ['dash','cats','brands','products','catalogs','settings'].forEach(p => {
+  ['dash','cats','brands','products','catalogs','settings','orders','drivers','buyers'].forEach(p => {
     const el = document.getElementById('page-' + p);
     if (el) el.classList.remove('mob-active');
   });
@@ -3101,6 +3152,120 @@ async function deleteDriver(id) {
   } catch(e) { toast('Ошибка удаления', 'e'); }
 }
 
+// ════════════════════ КЛИЕНТЫ ════════════════════
+let _buyers = [];
+let _buyerStats = {};
+let _editBuyerId = null;
+
+function bEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Тот же формат, что при входе в каталог: +7XXXXXXXXXX
+function normalizeBuyerPhone(raw) {
+  let c = String(raw).replace(/[^\d+]/g, '');
+  if (c.startsWith('8') && c.length === 11) c = '+7' + c.slice(1);
+  if (!c.startsWith('+') && c.length === 11) c = '+' + c;
+  return c;
+}
+
+async function loadBuyers() {
+  const box = document.getElementById('buyers-container');
+  if (!box) return;
+  box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Загрузка...</div>';
+  try {
+    const [buyers, orders] = await Promise.all([
+      API('buyers?select=*'),
+      API('orders?select=buyer_id,total_price,created_at')
+    ]);
+    _buyerStats = {};
+    orders.forEach(o => {
+      const s = _buyerStats[o.buyer_id] || (_buyerStats[o.buyer_id] = { count: 0, sum: 0, last: null });
+      s.count++;
+      s.sum += Number(o.total_price) || 0;
+      if (!s.last || o.created_at > s.last) s.last = o.created_at;
+    });
+    // новые регистрации сверху (если в таблице есть created_at)
+    _buyers = buyers.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    renderBuyers();
+  } catch (e) {
+    console.error(e);
+    box.innerHTML = '<div style="color:var(--danger);text-align:center;padding:40px">Ошибка загрузки</div>';
+  }
+}
+
+function renderBuyers() {
+  const box = document.getElementById('buyers-container');
+  if (!box) return;
+  const q = (document.getElementById('buyers-search').value || '').trim().toLowerCase();
+  const list = _buyers.filter(b => !q ||
+    [b.shop_name, b.phone, b.address].some(x => String(x || '').toLowerCase().includes(q)));
+  document.getElementById('buyers-count').textContent = `(${list.length}${q ? ' из ' + _buyers.length : ''})`;
+  if (!list.length) {
+    box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Клиентов не найдено</div>';
+    return;
+  }
+  const row = 'font-size:13px;color:var(--muted);margin-bottom:4px;word-break:break-word';
+  box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px">' +
+    list.map(b => {
+      const s = _buyerStats[b.id];
+      const phone = bEsc(b.phone || '');
+      const digits = String(b.phone || '').replace(/\D/g, '');
+      const reg = b.created_at ? new Date(b.created_at).toLocaleDateString('ru-RU') : '';
+      const last = s && s.last ? new Date(s.last).toLocaleDateString('ru-RU') : '';
+      return `
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:16px">
+          <div style="font-size:15px;font-weight:700;margin-bottom:8px;word-break:break-word">🏪 ${bEsc(b.shop_name) || '—'}</div>
+          <div style="${row}">📞 <a href="tel:${phone}" style="color:inherit">${phone || '—'}</a></div>
+          <div style="${row}">📍 ${bEsc(b.address) || '—'}</div>
+          ${reg ? `<div style="${row}">🗓️ Регистрация: ${reg}</div>` : ''}
+          <div style="${row};padding-top:8px;margin-top:8px;border-top:1px solid var(--border)">
+            🛍️ Заказов: <b style="color:var(--text)">${s ? s.count : 0}</b>${s ? ' · ' + s.sum.toLocaleString() + ' ₸' : ''}
+            ${last ? '<br>Последний: ' + last : ''}
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button onclick="openBuyerModal('${b.id}')" class="btn btn-sm" style="flex:1;justify-content:center">✏️ Изменить</button>
+            ${digits ? `<a href="https://wa.me/${digits}" target="_blank" rel="noopener" class="btn btn-sm" style="justify-content:center;text-decoration:none">💬</a>` : ''}
+          </div>
+        </div>`;
+    }).join('') + '</div>';
+}
+
+function openBuyerModal(id) {
+  const b = _buyers.find(x => String(x.id) === String(id));
+  if (!b) return;
+  _editBuyerId = b.id;
+  document.getElementById('buyer-shop').value    = b.shop_name || '';
+  document.getElementById('buyer-phone').value   = b.phone || '';
+  document.getElementById('buyer-address').value = b.address || '';
+  openM('m-buyer');
+}
+
+async function saveBuyer() {
+  const shop    = document.getElementById('buyer-shop').value.trim();
+  const address = document.getElementById('buyer-address').value.trim();
+  const phone   = normalizeBuyerPhone(document.getElementById('buyer-phone').value.trim());
+  if (!shop)  { toast('Введите название магазина', 'e'); return; }
+  if (phone.length < 11) { toast('Неверный формат номера', 'e'); return; }
+  try {
+    // номер должен оставаться уникальным: по нему идёт вход
+    const dup = await API(`buyers?phone=eq.${encodeURIComponent(phone)}&id=neq.${_editBuyerId}&select=id`);
+    if (dup.length) { toast('Этот номер уже у другого клиента', 'e'); return; }
+    await API(`buyers?id=eq.${_editBuyerId}`, {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=minimal' },
+      body: { shop_name: shop, phone, address }
+    });
+    toast('✅ Сохранено', 's');
+    closeM('m-buyer');
+    loadBuyers();
+  } catch (e) {
+    console.error(e);
+    toast('Ошибка сохранения', 'e');
+  }
+}
+
 // ════════ НАЗНАЧЕНИЕ ВОДИТЕЛЯ ════════
 let _assignOrderId = null;
 
@@ -3149,7 +3314,11 @@ async function loadVariants(productId) {
   if (productId) {
     try {
       const data = await API(`product_variants?product_id=eq.${productId}&order=display_order`);
-      _variants = data.map(v => ({ id: v.id, name: v.name, isNew: false }));
+      _variants = data.map(v => ({
+        id: v.id, name: v.name, isNew: false,
+        is_visible: v.is_visible !== false,
+        wasVisible: v.is_visible !== false
+      }));
     } catch(e) {}
   }
   renderVariants();
@@ -3163,9 +3332,12 @@ function renderVariants() {
     return;
   }
   list.innerHTML = _variants.map((v, i) => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg3);border-radius:8px;margin-bottom:6px">
-      <span style="font-size:13px">🍬 ${v.name}</span>
-      <button onclick="removeVariant(${i})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:18px;line-height:1;padding:0 4px">×</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;background:var(--bg3);border-radius:8px;margin-bottom:6px;${v.is_visible ? '' : 'opacity:.6'}">
+      <span style="font-size:13px;${v.is_visible ? '' : 'text-decoration:line-through'}">🍬 ${v.name}</span>
+      <span style="display:flex;align-items:center;gap:6px">
+        <button type="button" class="btn btn-xs ${v.is_visible ? 'btn-ghost' : 'btn-danger'}" onclick="toggleVariant(${i})" style="font-size:10px">${v.is_visible ? '👁️ Виден' : '🚫 Скрыт'}</button>
+        <button type="button" onclick="removeVariant(${i})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:18px;line-height:1;padding:0 4px">×</button>
+      </span>
     </div>`).join('');
 }
 
@@ -3175,7 +3347,7 @@ function addVariant() {
   if (!val) return;
   val.split(',').forEach(n => {
     const trimmed = n.trim();
-    if (trimmed) _variants.push({ id: null, name: trimmed, isNew: true });
+    if (trimmed) _variants.push({ id: null, name: trimmed, isNew: true, is_visible: true });
   });
   input.value = '';
   renderVariants();
@@ -3188,16 +3360,28 @@ function removeVariant(index) {
   renderVariants();
 }
 
+function toggleVariant(index) {
+  _variants[index].is_visible = !_variants[index].is_visible;
+  renderVariants();
+}
+
 async function saveVariants(productId) {
   for (const vid of _deletedVariantIds) {
     try { await API(`product_variants?id=eq.${vid}`, { method: 'DELETE' }); } catch(e) {}
   }
+  // Существующие вкусы, у которых изменилась видимость
+  for (const v of _variants.filter(v => v.id && v.is_visible !== v.wasVisible)) {
+    try {
+      await API(`product_variants?id=eq.${v.id}`, { method: 'PATCH', body: { is_visible: v.is_visible } });
+    } catch(e) { console.error(e); }
+  }
+  // Новые вкусы
   const newOnes = _variants.filter(v => v.isNew);
   for (let i = 0; i < newOnes.length; i++) {
     try {
       await API('product_variants', {
         method: 'POST',
-        body: { product_id: productId, name: newOnes[i].name, display_order: i }
+        body: { product_id: productId, name: newOnes[i].name, display_order: i, is_visible: newOnes[i].is_visible !== false }
       });
     } catch(e) {}
   }
