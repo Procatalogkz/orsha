@@ -430,6 +430,35 @@ pre.code{background:var(--bg3);border:1px solid var(--border);border-radius:var(
 @media(max-width:1024px) and (min-width:641px) {
   #orders-container > div { grid-template-columns: repeat(2,1fr) !important; }
 }
+
+/* ── КАРТОЧКИ ЗАКАЗОВ: одинаковый размер, 5 позиций + раскрытие ── */
+.order-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: 14px;
+}
+/* Резервируем место под 5 позиций, чтобы карточки были одной высоты */
+.order-item-list { min-height: 110px; }
+.order-item-row { line-height: 18px; }
+.order-card-more { display: none; }
+.order-card.expanded .order-card-more { display: block; }
+.order-card-toggle {
+  width: 100%;
+  margin-top: 4px;
+  padding: 5px 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--r);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.order-card-toggle:hover { background: rgba(255,255,255,.04); }
 </style>
 </head>
 <body>
@@ -2921,6 +2950,8 @@ const STATUS_NEXT = { new: 'sent', sent: 'in_transit', in_transit: 'delivering',
 
 let _allOrders = [];
 let _allOrderItems = {};
+// id заказов, у которых раскрыт полный список позиций
+const _expandedOrders = new Set();
 
 async function loadOrders() {
   const container = document.getElementById('orders-container');
@@ -2985,7 +3016,7 @@ function filterOrders() {
     return;
   }
 
-  container.innerHTML = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">' + filtered.map(order => {
+  container.innerHTML = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:stretch">' + filtered.map(order => {
     const st = STATUS_LABELS[order.status] || STATUS_LABELS.new;
     const buyer = order.buyers;
     const orderItems = _allOrderItems[order.id] || [];
@@ -2994,8 +3025,20 @@ function filterOrders() {
       day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'
     });
 
+    // Первые 5 позиций видны всегда, остальные — по кнопке «Ещё»
+    const VISIBLE_ITEMS = 5;
+    const visibleItems = orderItems.slice(0, VISIBLE_ITEMS);
+    const hiddenItems  = orderItems.slice(VISIBLE_ITEMS);
+    const isExpanded   = _expandedOrders.has(order.id);
+
+    const itemRow = i => `
+      <div class="order-item-row" style="display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:2px 0">
+        <span style="color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.product_name} × ${i.quantity} уп.</span>
+        <span style="font-weight:600;white-space:nowrap;flex-shrink:0">${(i.total_price||0).toLocaleString()} ₸</span>
+      </div>`;
+
     return `
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:10px">
+      <div class="order-card${isExpanded ? ' expanded' : ''}">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px">
           <div style="min-width:0">
             <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
@@ -3009,16 +3052,17 @@ function filterOrders() {
           </span>
         </div>
         <div style="border-top:1px solid var(--border);padding-top:8px;margin-bottom:10px">
-          ${orderItems.map(i => `
-            <div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0">
-              <span style="color:var(--muted)">${i.product_name} × ${i.quantity} уп.</span>
-              <span style="font-weight:600">${(i.total_price||0).toLocaleString()} ₸</span>
-            </div>`).join('')}
+          <div class="order-item-list">
+            ${visibleItems.map(itemRow).join('')}
+            ${hiddenItems.length ? `<div class="order-card-more">${hiddenItems.map(itemRow).join('')}</div>` : ''}
+          </div>
+          ${hiddenItems.length ? `<button type="button" class="order-card-toggle" data-more="${hiddenItems.length}" aria-expanded="${isExpanded ? 'true' : 'false'}" onclick="toggleOrderItems('${order.id}', this)">${isExpanded ? '▴ Свернуть' : `▾ Ещё ${hiddenItems.length} поз.`}</button>` : ''}
           <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
             <span>Итого</span>
             <span>${(order.total_price||0).toLocaleString()} ₸</span>
           </div>
         </div>
+        <div style="margin-top:auto">
         ${nextStatus ? (() => {
           if (nextStatus === 'sent') {
             return `<button onclick="openAssignDriver('${order.id}')"
@@ -3053,8 +3097,20 @@ function filterOrders() {
             style="width:100%;padding:8px;background:transparent;color:var(--accent);border:1.5px solid var(--accent);border-radius:var(--r);font-size:12px;font-weight:700;cursor:pointer;margin-top:6px">
             🖨️ Сформировать накладную
           </button>` : ''}
+        </div>
       </div>`;
   }).join('') + '</div>';
+}
+
+// Раскрыть / свернуть полный список позиций в карточке заказа
+function toggleOrderItems(orderId, btn) {
+  const card = btn.closest('.order-card');
+  if (!card) return;
+  const expanded = card.classList.toggle('expanded');
+  if (expanded) _expandedOrders.add(orderId);
+  else _expandedOrders.delete(orderId);
+  btn.textContent = expanded ? '▴ Свернуть' : `▾ Ещё ${btn.dataset.more} поз.`;
+  btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
 }
 
 async function updateOrderStatus(orderId, newStatus) {
